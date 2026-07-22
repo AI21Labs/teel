@@ -1,0 +1,17 @@
+[project]
+name = "teel"
+version = "0.1.0"
+description = ""
+authors = [{ name = "AI21" }]
+readme = "README.md"
+requires-python = "==3.12.13"
+dependencies = []
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# The frameinspect C extension (teel/frameinspect.c) is declared in setup.py:
+# PEP 621 metadata cannot express ext_modules, so a minimal setup.py carries it.
+[tool.setuptools]
+packages = ["teel"]
