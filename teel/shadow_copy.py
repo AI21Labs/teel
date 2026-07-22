@@ -1,25 +1,28 @@
+from __future__ import annotations
+
 import copy
 import functools
 from types import FunctionType
+from typing import Any, Callable
 
 
 class Memo(dict):
-    def __init__(self, *, shadows):
+    def __init__(self, *, shadows: dict[int, Any]):
         super().__init__()
-        self.shadows = shadows
+        self.shadows: dict[int, Any] = shadows
 
 
-def wrap_deepcopy(wrapped):
+def wrap_deepcopy(wrapped: Callable) -> Callable:
 
     @functools.wraps(wrapped)
-    def wrapper(x, memo, **kwargs):
+    def wrapper(x: Any, memo: Memo, **kwargs: Any) -> Any:
         x = memo.shadows.get(id(x), x)
         return wrapped(x, memo, **kwargs)
 
     return wrapper
 
 
-def _copy_func(src, globals_):
+def _copy_func(src: FunctionType, globals_: dict[str, Any]) -> FunctionType:
     dst = FunctionType(
         src.__code__,
         globals_,
@@ -36,10 +39,10 @@ def _copy_func(src, globals_):
     return dst
 
 
-def build_shadow_deepcopy():
-    m_globals = {}
-    m_funcs = {}
-    m_dicts = []
+def build_shadow_deepcopy() -> Callable:
+    m_globals: dict[str, Any] = {}
+    m_funcs: dict[FunctionType, FunctionType] = {}
+    m_dicts: list[dict] = []
 
     for key, old_v in copy.__dict__.items():
         if (
@@ -58,7 +61,7 @@ def build_shadow_deepcopy():
             new_v = old_v
         m_globals[key] = new_v
 
-    def convert(x):
+    def convert(x: Any) -> Any:
         return m_funcs.get(x) if isinstance(x, FunctionType) else x
 
     for func in m_funcs.values():
@@ -77,4 +80,4 @@ def build_shadow_deepcopy():
     return m_globals["deepcopy"]
 
 
-shadow_deepcopy = build_shadow_deepcopy()
+shadow_deepcopy: Callable = build_shadow_deepcopy()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import wraps
+from types import FunctionType
 from typing import Any, Callable, Optional
 from concurrent.futures import ThreadPoolExecutor, Future
 import threading
@@ -16,10 +17,10 @@ def _callback_key(func: Callable, args: list, kwargs: dict[str, Any]):
     return (func, json.dumps([args, kwargs], sort_keys=True))
 
 
-def cacheable(wrapped):
+def cacheable(wrapped: Callable) -> Callable:
 
     @wraps(wrapped)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         teel = getattr(_local, "t", None)
 
         if teel is None:
@@ -32,17 +33,17 @@ def cacheable(wrapped):
     return wrapper
 
 
-def jit(func):
+def jit(func: FunctionType) -> FunctionType:
     lookahead.add_source(func)
     return func
 
 
-def inline(func):
+def inline(func: Callable) -> Callable:
     lookahead.add_inline(func)
     return func
 
 
-def _should_retry(future: Future):
+def _should_retry(future: Future) -> bool:
     if not future.done():
         return False
     try:
@@ -54,8 +55,10 @@ def _should_retry(future: Future):
 
 
 class Teel:
-    def __init__(self, max_workers=None, *, trace_path: Optional[str] = None):
-        self.calls = {}
+    def __init__(
+        self, max_workers: Optional[int] = None, *, trace_path: Optional[str] = None
+    ):
+        self.calls: dict[Any, Future] = {}
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.lock = threading.Lock()
         self.trace_path = trace_path
@@ -63,18 +66,20 @@ class Teel:
         self.step: int = 0
         self.callno: int = 0
 
-    def __enter__(self):
+    def __enter__(self) -> Teel:
         self.executor.__enter__()
         _local.t = self
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: Any) -> None:
         _local.t = None
         self.executor.__exit__(*exc)
         if (self.timeline is not None) and self.trace_path:
             self.timeline.save(self.trace_path)
 
-    def _get_future(self, func, args, kwargs) -> tuple[Future, bool]:
+    def _get_future(
+        self, func: Callable, args: list, kwargs: dict[str, Any]
+    ) -> tuple[Future, bool]:
         key = _callback_key(func, args, kwargs)
         owner = False
         with self.lock:
@@ -92,20 +97,20 @@ class Teel:
                 return None
             return self.step
 
-    def _inc_callno(self):
+    def _inc_callno(self) -> int:
         with self.lock:
             self.callno += 1
             return self.callno
 
     def _run(
         self,
-        func,
-        args,
-        kwargs,
-        state=None,
+        func: Callable,
+        args: list,
+        kwargs: dict[str, Any],
+        state: Optional[lookahead.State] = None,
         step: Optional[int] = None,
         parent_callno: Optional[int] = None,
-    ):
+    ) -> Any:
         callno = self._inc_callno()
 
         if (step := self._get_step(step)) is None:
@@ -138,8 +143,14 @@ class Teel:
         return result
 
     def _dispatch(
-        self, /, *, state=None, ret=lookahead.PENDING, step: int, callno: int
-    ):
+        self,
+        /,
+        *,
+        state: Optional[lookahead.State] = None,
+        ret: Any = lookahead.PENDING,
+        step: int,
+        callno: int,
+    ) -> None:
         try:
             for cb in lookahead.search(state=state, ret=ret):
                 self.executor.submit(

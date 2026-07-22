@@ -5,7 +5,7 @@ import threading
 import time
 from dataclasses import dataclass
 from functools import wraps
-from typing import Optional, Callable
+from typing import Any, Optional, Callable
 
 
 @dataclass
@@ -17,10 +17,7 @@ class _Event:
     dur_us: float
     callno: int
     parent_callno: Optional[int]
-    success: str
-
-
-bool
+    success: bool
 
 
 class Timeline:
@@ -40,12 +37,12 @@ class Timeline:
         name: Optional[str] = None,
         callno: int,
         parent_callno: Optional[int],
-    ):
+    ) -> Callable:
         if name is None:
             name = wrapped.__name__
 
         @wraps(wrapped)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             tid = threading.get_ident()
             thread_name = threading.current_thread().name
             start = self._now_us()

@@ -7,7 +7,7 @@ from copy import copy, deepcopy
 from types import CodeType, FunctionType
 from weakref import WeakKeyDictionary
 from functools import partial
-from typing import Optional, Callable, Any, NamedTuple
+from typing import Optional, Callable, Any, NamedTuple, Iterator
 from collections import deque
 
 from .frame import Frame, Instruction, instructions_from_code
@@ -158,7 +158,7 @@ methods: dict[Callable, MethodType] = {
 }
 
 
-def _split_bound_method(func) -> tuple[Any, list]:
+def _split_bound_method(func: Any) -> tuple[Any, list]:
     if ((self := getattr(func, "__self__", None)) is not None) and (
         ((unbound := getattr(func, "__func__", None)) is not None)
         or (
@@ -172,10 +172,32 @@ def _split_bound_method(func) -> tuple[Any, list]:
 
 
 def search(
-    max_jump_width=2, max_jump_depth=4, ret=PENDING, state: Optional[State] = None
-):
+    max_jump_width: int = 2,
+    max_jump_depth: int = 4,
+    ret: Any = PENDING,
+    state: Optional[State] = None,
+) -> Iterator[Call]:
 
-    def do_call():
+    if state is None:
+        frame = Frame.from_frame(
+            sys._getframe().f_back, instructions_from_code=_instructions_from_code
+        )
+        shadows: dict[int, Any] = {}
+        swodahs: dict[int, Any] = {}
+        depth = 0
+    else:
+        frame, shadows, swodahs, depth = state
+
+    if (depth > max_jump_depth) or (frame is None):
+        return
+    frame.stack.append(ret)
+    stack, instr = frame.stack, frame.instr.next
+    if (f_globals := shadows.get(id(frame.f_globals), sentinel)) is sentinel:
+        shadows[id(frame.f_globals)] = f_globals = copy(frame.f_globals)
+        swodahs[id(f_globals)] = frame.f_globals
+    jump_frames: deque[State] = deque()
+
+    def do_call() -> Iterator[Call]:
         nonlocal instr, stack, frame, f_globals
         if opcode == CALL:
             kw_names = frame.kw_names
@@ -299,7 +321,7 @@ def search(
             stack.append(PENDING)
             instr = instr.next
 
-    def do_return(value=PENDING):
+    def do_return(value: Any = PENDING) -> bool:
         nonlocal instr, stack, frame, f_globals, shadows, swodahs, depth
         f_back = frame.f_back
         if f_back is not None:
@@ -316,27 +338,6 @@ def search(
             shadows[id(frame.f_globals)] = f_globals = dict(frame.f_globals)
             swodahs[id(f_globals)] = frame.f_globals
         return False
-
-    if state is None:
-        shadows = {}
-        swodahs = {}
-        frame = Frame.from_frame(
-            sys._getframe().f_back, instructions_from_code=_instructions_from_code
-        )
-        depth = 0
-    else:
-        frame, shadows, swodahs, depth = state
-
-    if depth > max_jump_depth:
-        return []
-    frame.stack.append(ret)
-    if frame is None:
-        return []
-    stack, instr = frame.stack, frame.instr.next
-    if (f_globals := shadows.get(id(frame.f_globals), sentinel)) is sentinel:
-        shadows[id(frame.f_globals)] = f_globals = copy(frame.f_globals)
-        swodahs[id(f_globals)] = frame.f_globals
-    jump_frames: deque[State] = deque()
 
     while True:
         try:
@@ -746,7 +747,7 @@ def search(
                 break
 
 
-def _instructions_from_code(code: CodeType):
+def _instructions_from_code(code: CodeType) -> Optional[dict[int, Instruction]]:
     instructions = sources.get(code)
     if instructions is not None:
         return instructions
@@ -756,7 +757,7 @@ def _instructions_from_code(code: CodeType):
     return instructions
 
 
-def add_source(src: FunctionType | CodeType | str):
+def add_source(src: FunctionType | CodeType | str) -> FunctionType | CodeType | str:
     if isinstance(src, FunctionType):
         sources[src.__code__] = instructions_from_code(src.__code__)
     elif isinstance(src, CodeType):
@@ -770,11 +771,11 @@ def add_source(src: FunctionType | CodeType | str):
     return src
 
 
-def add_inline(func: Callable):
+def add_inline(func: Callable) -> Callable:
     methods[func] = MethodType.DEEP_READ
     return func
 
 
-def add_target(func: Callable):
+def add_target(func: Callable) -> Callable:
     methods[func] = MethodType.TARGET
     return func

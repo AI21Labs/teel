@@ -72,6 +72,9 @@ class Instruction:
         "inplace",
     ]
 
+    next: Instruction
+    jump: Instruction
+
     def __init__(
         self,
         opname: str,
@@ -79,16 +82,12 @@ class Instruction:
         arg: int,
         argval: Any,
         positions: dis.Positions,
-        next: Optional[Instruction] = None,
-        jump: Optional[Instruction] = None,
     ):
         self.opname: str = opname
         self.opcode: int = opcode
         self.arg: int = arg
         self.argval: Any = argval
         self.positions: dis.Positions = positions
-        self.next: Optional[Instruction] = next
-        self.jump: Optional[Instruction] = jump
 
         if self.opcode == BINARY_OP:
             self.opfunc, self.inplace = BINARY_OPS[arg]
@@ -139,7 +138,7 @@ class Frame:
         f_code: Any,
         stack: deque[Any],
         f_back: Optional[Frame] = None,
-        instr: Optional[Instruction] = None,
+        instr: Instruction,
         kw_names: tuple[str, ...] = (),
         index: int,
     ):
@@ -149,7 +148,7 @@ class Frame:
         self.f_code: Any = f_code
         self.stack: deque[Any] = stack
         self.f_back: Optional[Frame] = f_back
-        self.instr: Optional[Instruction] = instr
+        self.instr: Instruction = instr
         self.kw_names: tuple[str, ...] = kw_names
         self.index = index
 
@@ -160,8 +159,8 @@ class Frame:
         args: list,
         kwargs: dict[str, Any],
         f_back: Frame,
-        instructions_from_code,
-    ):
+        instructions_from_code: Callable,
+    ) -> Frame:
         bound = signature(func, follow_wrapped=False).bind_partial(*args, **kwargs)
         bound.apply_defaults()
         f_locals = dict(bound.arguments)
@@ -181,12 +180,12 @@ class Frame:
             f_globals=func.__globals__,
             f_builtins=func.__builtins__,
             stack=deque(),
-            instr=next(iter(instructions_from_code(f_code).values()), None),
+            instr=next(iter(instructions_from_code(f_code).values())),
             index=f_back.index + 1,
         )
 
     @staticmethod
-    def from_frame(frame, *, instructions_from_code):
+    def from_frame(frame: Any, *, instructions_from_code: Callable) -> Optional[Frame]:
         chain = deque()
         while frame is not None:
             chain.appendleft(frame)
@@ -206,7 +205,7 @@ class Frame:
                 )
         return fr
 
-    def copy(self, *, instr):
+    def copy(self, *, instr: Optional[Instruction]) -> Frame:
         chain = deque()
         frame = self
         while frame is not None:
