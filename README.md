@@ -103,7 +103,7 @@ The small `tests/test_lookahead.py` (desparately needs to grow in size) helps wi
 We took [Princeton's `tree-of-thoughts-llm`](https://github.com/princeton-nlp/tree-of-thought-llm), unmodified, and ran several samples of the "Game of 24" dataset with GPT-4.
 We applied our decorators outside of the original code, decorating `@jit`, `@cacheable` and `@inline`.
 Because the original is written in a naive synchronous code we managed to get an average reduction of 83% in runtime compared to regular execution (from as low as 148s optimized into 24s and as high as 307s optimized into 38s).
-See [`examples/tree_of_thought.py`](examples/tree_of_thought.py).
+See [`examples/tree_of_thought.py`](examples/tree_of_thoughts.py).
 
 ## Example: Recursive Language Models in Deep Agents
 
