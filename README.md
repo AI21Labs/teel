@@ -133,11 +133,11 @@ To install and run:
 
 ```
 uv sync
-uv run python main.py
+uv run python -m examples.hello_world
 ```
 
 The `uv sync` commands takes care of building the `frameinspect` C extension.
-The `main.py` script runs a insanely simple diamond pipeline with and without `Teel`, prints time metrics and saves a timeline into `teel-trace.json`, available for viewing at [ui.perfetto.dev](https://ui.perfetto.dev/).
+The `hello_world` example runs an insanely simple diamond pipeline with and without `Teel`, prints time metrics and saves a timeline into `teel-trace.json`, available for viewing at [ui.perfetto.dev](https://ui.perfetto.dev/).
 Note that we currently have a hard constraint on exact Python version 3.12.13.
 This is because `frameinspect.c` needs CPython's internal headers, so if you're running with a different Python version you may need to adjust the extension.
 
