@@ -1,11 +1,32 @@
 [project]
 name = "teel"
 version = "0.1.0"
-description = ""
+description = "Speculative ahead-of-time parallelization of plain synchronous Python via a shadow bytecode interpreter"
 authors = [{ name = "AI21" }]
 readme = "README.md"
 requires-python = "==3.12.13"
 dependencies = []
+keywords = [
+    "concurrency",
+    "parallelism",
+    "speculative-execution",
+    "lookahead",
+    "bytecode",
+    "cache",
+    "threadpool",
+    "cpython",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
+
+[project.urls]
+Repository = "https://github.com/AI21Labs/teel"
+Issues = "https://github.com/AI21Labs/teel/issues"
 
 [build-system]
 requires = ["setuptools", "wheel"]
