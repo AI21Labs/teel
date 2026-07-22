@@ -1,4 +1,4 @@
-# Teel
+# 🚀 Teel
 
 ## Making synchronous code run faster
 
