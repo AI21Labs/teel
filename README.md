@@ -103,11 +103,13 @@ The small `tests/test_lookahead.py` (desparately needs to grow in size) helps wi
 We took [Princeton's `tree-of-thoughts-llm`](https://github.com/princeton-nlp/tree-of-thought-llm), unmodified, and ran several samples of the "Game of 24" dataset with GPT-4.
 We applied our decorators outside of the original code, decorating `@jit`, `@cacheable` and `@inline`.
 Because the original is written in a naive synchronous code we managed to get an average reduction of 83% in runtime compared to regular execution (from as low as 148s optimized into 24s and as high as 307s optimized into 38s).
+See [`examples/tree_of_thought.py`](examples/tree_of_thought.py).
 
 ## Example: Recursive Language Models in Deep Agents
 
 We took LangChain's Deep Agents (specifically the Deep Agents Code CLI, or `dcode`) for a spin.
 See [How to Use RLMs in Deep Agents](https://www.langchain.com/blog/how-to-use-rlms-in-deep-agents).
+Our [Deep Agents fork](https://github.com/AI21Labs/deepagents) uses Teel.
 The `dcode` CLI comes with an RLM-based `js_eval` tool - the model can choose to use it to run a Javascript snippet. The snippet *itself* can contain tool calls (such as `tools.web_search()`) and also a call to `task()` which runs a subagent (with its own context) as part of the snippet execution, achieving the recursion.
 The snippet is run in a sandboxed environment using QuickJS.
 Putting isolation aside, we wanted to measure the effect on the runtime if we replaced the (async) JS with synchronous Python, freeing the LLM from async considerations in writing the code.
