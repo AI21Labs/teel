@@ -127,10 +127,12 @@ class Frame:
         "f_back",
         "instr",
         "kw_names",
+        "index",
     ]
 
     def __init__(
         self,
+        *,
         f_globals: dict[str, Any],
         f_locals: dict[str, Any],
         f_builtins: dict[str, Any],
@@ -139,6 +141,7 @@ class Frame:
         f_back: Optional[Frame] = None,
         instr: Optional[Instruction] = None,
         kw_names: tuple[str, ...] = (),
+        index: int,
     ):
         self.f_globals: dict[str, Any] = f_globals
         self.f_locals: dict[str, Any] = f_locals
@@ -148,6 +151,7 @@ class Frame:
         self.f_back: Optional[Frame] = f_back
         self.instr: Optional[Instruction] = instr
         self.kw_names: tuple[str, ...] = kw_names
+        self.index = index
 
     @staticmethod
     def from_callable(
@@ -178,6 +182,7 @@ class Frame:
             f_builtins=func.__builtins__,
             stack=deque(),
             instr=next(iter(instructions_from_code(f_code).values()), None),
+            index=f_back.index + 1,
         )
 
     @staticmethod
@@ -187,19 +192,8 @@ class Frame:
             chain.appendleft(frame)
             frame = frame.f_back
         fr = None
-        for frame in chain:
-            instructions = instructions_from_code(frame.f_code)
-            if instructions is None:
-                fr = Frame(
-                    f_back=fr,
-                    f_code=None,
-                    f_locals={},
-                    f_globals={},
-                    f_builtins={},
-                    stack=deque(),
-                    instr=None,
-                )
-            else:
+        for index, frame in enumerate(chain):
+            if (instructions := instructions_from_code(frame.f_code)) is not None:
                 fr = Frame(
                     f_back=fr,
                     f_code=frame.f_code,
@@ -208,6 +202,7 @@ class Frame:
                     f_builtins=frame.f_builtins,
                     stack=deque(getvaluestack(frame)),
                     instr=instructions[frame.f_lasti],
+                    index=index,
                 )
         return fr
 
@@ -228,6 +223,7 @@ class Frame:
                 f_back=fr,
                 instr=frame.instr,
                 kw_names=frame.kw_names,
+                index=frame.index,
             )
         fr.instr = instr
         return fr

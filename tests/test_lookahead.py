@@ -15,9 +15,9 @@ _GLOBAL_COUNTER = 37
 
 class TestLookahead(unittest.TestCase):
     def _search(self):
-        if self.results is not None:
+        if self.predictions is not None:
             for call in lookahead.search():
-                self.results.append(call.args[0])
+                self.predictions.append(call.args[0])
 
     @lookahead.add_source
     def search(self, x=None):
@@ -33,16 +33,18 @@ class TestLookahead(unittest.TestCase):
         lookahead.add_source(inner)
         lookahead.add_source(outer)
 
-        self.results = None
+        self.predictions = None
         result = copy.deepcopy(outer())
-        self.results = []
+        self.predictions = []
         assert outer() == result
-        assert result in self.results
-        if expected is not None:
-            assert all(x in expected for x in self.results)
-            assert all(x in self.results for x in expected)
+        if expected is None:
+            assert self.predictions == [result]
+        elif expected:
+            assert result in self.predictions
+            assert all(x in expected for x in self.predictions)
+            assert all(x in self.predictions for x in expected)
         else:
-            assert self.results == [result]
+            assert not self.predictions
 
     def test_const(self):
 
@@ -478,6 +480,20 @@ class TestLookahead(unittest.TestCase):
             return (z.get("X") is x, z.get("Y", y) is y)
 
         self.assert_lookahead(mine)
+
+    def test_skip(self):
+        @lookahead.add_source
+        def inner():
+            self.search()
+            return 666
+
+        def middle():
+            return inner()
+
+        def mine():
+            return middle()
+
+        self.assert_lookahead(mine, expected=[])
 
 
 if __name__ == "__main__":

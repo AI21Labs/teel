@@ -301,10 +301,10 @@ def search(
 
     def do_return(value=PENDING):
         nonlocal instr, stack, frame, f_globals, shadows, swodahs, depth
-        frame = frame.f_back
-        if frame is not None:
-            frame.stack.append(value)
-            frame = _skip_frames(frame)
+        f_back = frame.f_back
+        if f_back is not None:
+            f_back.stack.append(value if f_back.index + 1 == frame.index else PENDING)
+        frame = f_back
         if frame is None:
             if not jump_frames:
                 return True
@@ -330,7 +330,6 @@ def search(
     if depth > max_jump_depth:
         return []
     frame.stack.append(ret)
-    frame = _skip_frames(frame)
     if frame is None:
         return []
     stack, instr = frame.stack, frame.instr.next
@@ -340,8 +339,8 @@ def search(
     jump_frames: deque[State] = deque()
 
     while True:
-        opcode = instr.opcode
         try:
+            opcode = instr.opcode
             if (
                 (opcode == STORE_FAST)
                 or (opcode == STORE_DEREF)
@@ -745,22 +744,6 @@ def search(
         except Exception:
             if do_return():
                 break
-
-
-def _skip_frames(frame: Optional[Frame]) -> Optional[Frame]:
-    if frame is None:
-        return
-    while not (
-        (frame.f_code is not None)
-        and (
-            (frame.f_code in sources) or (frame.f_code.co_filename in filename_sources)
-        )
-    ):
-        frame = frame.f_back
-        if frame is None:
-            return
-        frame.stack.append(PENDING)
-    return frame
 
 
 def _instructions_from_code(code: CodeType):
