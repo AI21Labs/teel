@@ -1,6 +1,6 @@
 [project]
 name = "teel"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Speculative ahead-of-time parallelization of plain synchronous Python via a shadow bytecode interpreter"
 authors = [{ name = "AI21" }]
 readme = "README.md"
@@ -29,10 +29,19 @@ Repository = "https://github.com/AI21Labs/teel"
 Issues = "https://github.com/AI21Labs/teel/issues"
 
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools", "wheel", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
-# The frameinspect C extension (teel/frameinspect.c) is declared in setup.py:
-# PEP 621 metadata cannot express ext_modules, so a minimal setup.py carries it.
 [tool.setuptools]
 packages = ["teel"]
+
+[tool.setuptools_scm]
+
+[tool.semantic_release]
+tag_format = "v{version}"
+build_command = "SETUPTOOLS_SCM_PRETEND_VERSION=$NEW_VERSION uv build --sdist"
+dist_glob_patterns = ["dist/*"]
+upload_to_vcs_release = true
+
+[tool.semantic_release.branches.main]
+match = "master"
