@@ -44,4 +44,4 @@ dist_glob_patterns = ["dist/*"]
 upload_to_vcs_release = true
 
 [tool.semantic_release.branches.main]
-match = "master"
+match = "main"
