@@ -45,6 +45,7 @@ tag_format = "v{version}"
 build_command = "SETUPTOOLS_SCM_PRETEND_VERSION=$NEW_VERSION uv build --sdist"
 dist_glob_patterns = ["dist/*"]
 upload_to_vcs_release = true
+allow_zero_version = true
 
 [tool.semantic_release.branches.main]
 match = "main"
