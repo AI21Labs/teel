@@ -35,6 +35,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["teel"]
 
+[tool.setuptools.package-data]
+teel = ["py.typed"]
+
 [tool.setuptools_scm]
 
 [tool.semantic_release]
