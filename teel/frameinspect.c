@@ -14,20 +14,38 @@
 #include "internal/pycore_frame.h"    /* _PyInterpreterFrame, _PyFrame_Stackbase */
 #include "internal/pycore_code.h"     /* CO_FAST_CELL / CO_FAST_FREE, _PyLocals_GetKind */
 
-/* getvaluestack(frame) -> list
+/* getvaluestack(frame[, depth]) -> list
  *
  * Return a new list holding the objects currently on `frame`'s evaluation
  * (value) stack, bottom first. The value stack is the region of the frame's
  * `localsplus` array that sits above the locals/cells/frees, i.e. between
  * `_PyFrame_Stackbase(iframe)` and `iframe->localsplus + iframe->stacktop`.
  *
+ * `depth`, when given, must be an int and is used as the stack depth instead
+ * of deriving it from `iframe->stacktop`. This is the only way to read the
+ * stack while the eval loop owns the stack pointer (`stacktop < 0`), where the
+ * real depth has to come from elsewhere (e.g. computed from the bytecode).
+ * It must be within the code object's declared `co_stacksize`, since reading
+ * past that would walk off the frame's allocation.
+ *
+ * Omitting `depth` and passing a negative one are the same thing: a negative
+ * value is the "not supplied" sentinel, so it is not an error, it just falls
+ * back to deriving the depth from `stacktop`.
+ *
  * Each returned object gets a new strong reference (the list owns it), so the
  * result is safe to hold onto after the frame goes away. NULL stack slots are
  * reported as None.
  */
 static PyObject *
-frameinspect_getvaluestack(PyObject *self, PyObject *arg)
+frameinspect_getvaluestack(PyObject *self, PyObject *args)
 {
+    PyObject *arg;
+    Py_ssize_t depth = -1;
+
+    if (!PyArg_ParseTuple(args, "O|n:getvaluestack", &arg, &depth)) {
+        return NULL;
+    }
+
     if (!PyFrame_Check(arg)) {
         PyErr_Format(PyExc_TypeError,
                      "getvaluestack() expected a frame object, got %.200s",
@@ -44,13 +62,25 @@ frameinspect_getvaluestack(PyObject *self, PyObject *arg)
     }
 
     PyObject **base = _PyFrame_Stackbase(iframe);
-    /* stacktop is the offset of TOS-from-localsplus. It is transiently set to
-     * -1 while the eval loop owns the stack pointer; treat that as empty. */
-    Py_ssize_t depth = (iframe->stacktop < 0)
-                           ? 0
-                           : (iframe->localsplus + iframe->stacktop) - base;
+
     if (depth < 0) {
-        depth = 0;
+        /* stacktop is the offset of TOS-from-localsplus. It is transiently set
+         * to -1 while the eval loop owns the stack pointer; treat that as
+         * empty. */
+        depth = (iframe->stacktop < 0)
+                    ? 0
+                    : (iframe->localsplus + iframe->stacktop) - base;
+        if (depth < 0) {
+            depth = 0;
+        }
+    }
+
+    if (depth > iframe->f_code->co_stacksize) {
+        PyErr_Format(PyExc_ValueError,
+                     "getvaluestack() depth %zd out of range "
+                     "for co_stacksize %d",
+                     depth, iframe->f_code->co_stacksize);
+        return NULL;
     }
 
     PyObject *result = PyList_New(depth);
@@ -138,11 +168,16 @@ static PyMethodDef frameinspect_methods[] = {
      "(owned by this frame and shared with inner functions) and its freevars\n"
      "(handed to this frame by its enclosing function's closure). Uninitialised\n"
      "slots are reported as None; each cell is returned with a new reference."},
-    {"getvaluestack", frameinspect_getvaluestack, METH_O,
-     "getvaluestack(frame) -> list\n\n"
+    {"getvaluestack", frameinspect_getvaluestack, METH_VARARGS,
+     "getvaluestack(frame[, depth]) -> list\n\n"
      "Return the objects on the frame's evaluation (value) stack, bottom\n"
      "first. Each object is returned with a new reference; NULL slots become\n"
-     "None."},
+     "None.\n\n"
+     "If depth is given it must be an int, and is used as the stack depth\n"
+     "instead of deriving it from the frame's stacktop (which is unavailable\n"
+     "while the eval loop owns the stack pointer). It must be no greater than\n"
+     "the code object's co_stacksize. A negative depth means the same as\n"
+     "omitting it: derive the depth from stacktop."},
     {NULL, NULL, 0, NULL}
 };
 
