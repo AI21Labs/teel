@@ -1,85 +1,67 @@
-/* frameinspect: expose the CPython value stack of a frame object.
- *
- * Built specifically against CPython 3.12.13. The internal frame layout
- * (_PyInterpreterFrame, _PyFrame_Stackbase) is not part of the stable ABI,
- * so this needs the internal headers and Py_BUILD_CORE. Do NOT expect this
- * to work unchanged on a different 3.x minor version.
- */
-
 #define PY_SSIZE_T_CLEAN
 #define Py_BUILD_CORE 1
 
 #include <Python.h>
-#include <frameobject.h>              /* PyFrame_Type / PyFrame_Check */
-#include "internal/pycore_frame.h"    /* _PyInterpreterFrame, _PyFrame_Stackbase */
-#include "internal/pycore_code.h"     /* CO_FAST_CELL / CO_FAST_FREE, _PyLocals_GetKind */
+#include <frameobject.h>
+#include "internal/pycore_frame.h"
+#include "internal/pycore_code.h"
 
-/* getvaluestack(frame[, depth]) -> list
- *
- * Return a new list holding the objects currently on `frame`'s evaluation
- * (value) stack, bottom first. The value stack is the region of the frame's
- * `localsplus` array that sits above the locals/cells/frees, i.e. between
- * `_PyFrame_Stackbase(iframe)` and `iframe->localsplus + iframe->stacktop`.
- *
- * `depth`, when given, must be an int and is used as the stack depth instead
- * of deriving it from `iframe->stacktop`. This is the only way to read the
- * stack while the eval loop owns the stack pointer (`stacktop < 0`), where the
- * real depth has to come from elsewhere (e.g. computed from the bytecode).
- * It must be within the code object's declared `co_stacksize`, since reading
- * past that would walk off the frame's allocation.
- *
- * Omitting `depth` and passing a negative one are the same thing: a negative
- * value is the "not supplied" sentinel, so it is not an error, it just falls
- * back to deriving the depth from `stacktop`.
- *
- * Each returned object gets a new strong reference (the list owns it), so the
- * result is safe to hold onto after the frame goes away. NULL stack slots are
- * reported as None.
- */
+static inline _PyInterpreterFrame *
+get_iframe(PyObject *frame)
+{
+    if (!PyFrame_Check(frame)) {
+        PyErr_Format(
+            PyExc_TypeError,
+            "expected a frame object, got %.200s",
+            Py_TYPE(frame)->tp_name
+        );
+        return NULL;
+    }
+
+    _PyInterpreterFrame *iframe = ((PyFrameObject *)frame)->f_frame;
+    if (iframe == NULL) {
+        PyErr_SetString(
+            PyExc_RuntimeError,
+            "frame object has no underlying interpreter frame"
+        );
+        return NULL;
+    }
+
+    return iframe;
+}
+
 static PyObject *
 frameinspect_getvaluestack(PyObject *self, PyObject *args)
 {
-    PyObject *arg;
+    PyObject *frame;
     Py_ssize_t depth = -1;
 
-    if (!PyArg_ParseTuple(args, "O|n:getvaluestack", &arg, &depth)) {
+    if (!PyArg_ParseTuple(args, "O|n:getvaluestack", &frame, &depth)) {
         return NULL;
     }
 
-    if (!PyFrame_Check(arg)) {
-        PyErr_Format(PyExc_TypeError,
-                     "getvaluestack() expected a frame object, got %.200s",
-                     Py_TYPE(arg)->tp_name);
-        return NULL;
-    }
-
-    PyFrameObject *frame = (PyFrameObject *)arg;
-    _PyInterpreterFrame *iframe = frame->f_frame;
+    _PyInterpreterFrame *iframe = get_iframe(frame);
     if (iframe == NULL) {
-        PyErr_SetString(PyExc_RuntimeError,
-                        "frame object has no underlying interpreter frame");
         return NULL;
     }
 
     PyObject **base = _PyFrame_Stackbase(iframe);
 
     if (depth < 0) {
-        /* stacktop is the offset of TOS-from-localsplus. It is transiently set
-         * to -1 while the eval loop owns the stack pointer; treat that as
-         * empty. */
-        depth = (iframe->stacktop < 0)
-                    ? 0
-                    : (iframe->localsplus + iframe->stacktop) - base;
+        depth = (iframe->stacktop < 0) ? 0 : (iframe->localsplus + iframe->stacktop) - base;
         if (depth < 0) {
             depth = 0;
         }
     }
 
     if (depth > iframe->f_code->co_stacksize) {
-        PyErr_Format(PyExc_ValueError,
-                     "getvaluestack() depth %zd out of range "
-                     "for co_stacksize %d",
-                     depth, iframe->f_code->co_stacksize);
+        PyErr_Format(
+            PyExc_ValueError,
+            "getvaluestack() depth %zd out of range "
+            "for co_stacksize %d",
+            depth,
+            iframe->f_code->co_stacksize
+        );
         return NULL;
     }
 
@@ -94,48 +76,23 @@ frameinspect_getvaluestack(PyObject *self, PyObject *args)
             item = Py_None;
         }
         Py_INCREF(item);
-        PyList_SET_ITEM(result, i, item);  /* steals the reference we took */
+        PyList_SET_ITEM(result, i, item);
     }
 
     return result;
 }
 
-/* getcells(frame) -> dict
- *
- * Return {name: cell} for all of the frame's cells: both its cellvars (the
- * cells this frame owns and hands down to inner functions it defines) and its
- * freevars (the cells handed to this frame by its enclosing function's
- * closure).
- *
- * In 3.12 both cellvars and freevars are stored inline in `localsplus`,
- * interleaved with the plain fast-locals. The per-slot kind is recorded in
- * `co_localspluskinds` as a bitmask, and the matching name in
- * `co_localsplusnames`. The slot itself holds a PyCellObject* (not the cell's
- * value), which is exactly what we hand back. Each cell gets a new reference
- * (owned by the dict). A slot that hasn't been initialised yet (e.g. a cellvar
- * before its MAKE_CELL has executed) is reported as None.
- */
 static PyObject *
-frameinspect_getcells(PyObject *self, PyObject *arg)
+frameinspect_getcells(PyObject *self, PyObject *frame)
 {
-    if (!PyFrame_Check(arg)) {
-        PyErr_Format(PyExc_TypeError,
-                     "getcells() expected a frame object, got %.200s",
-                     Py_TYPE(arg)->tp_name);
-        return NULL;
-    }
-
-    PyFrameObject *frame = (PyFrameObject *)arg;
-    _PyInterpreterFrame *iframe = frame->f_frame;
+    _PyInterpreterFrame *iframe = get_iframe(frame);
     if (iframe == NULL) {
-        PyErr_SetString(PyExc_RuntimeError,
-                        "frame object has no underlying interpreter frame");
         return NULL;
     }
 
     PyCodeObject *co = iframe->f_code;
-    PyObject *names = co->co_localsplusnames;   /* tuple, borrowed */
-    PyObject *kinds = co->co_localspluskinds;   /* bytes, borrowed */
+    PyObject *names = co->co_localsplusnames;
+    PyObject *kinds = co->co_localspluskinds;
     int n = co->co_nlocalsplus;
 
     PyObject *result = PyDict_New();
@@ -151,7 +108,7 @@ frameinspect_getcells(PyObject *self, PyObject *arg)
         if (cell == NULL) {
             cell = Py_None;
         }
-        PyObject *name = PyTuple_GET_ITEM(names, i);  /* borrowed */
+        PyObject *name = PyTuple_GET_ITEM(names, i);
         if (PyDict_SetItem(result, name, cell) < 0) {
             Py_DECREF(result);
             return NULL;
@@ -164,27 +121,18 @@ frameinspect_getcells(PyObject *self, PyObject *arg)
 static PyMethodDef frameinspect_methods[] = {
     {"getcells", frameinspect_getcells, METH_O,
      "getcells(frame) -> dict\n\n"
-     "Return {name: cell} for all of the frame's cells: both its cellvars\n"
-     "(owned by this frame and shared with inner functions) and its freevars\n"
-     "(handed to this frame by its enclosing function's closure). Uninitialised\n"
-     "slots are reported as None; each cell is returned with a new reference."},
+     "Return the frame's cells."},
     {"getvaluestack", frameinspect_getvaluestack, METH_VARARGS,
      "getvaluestack(frame[, depth]) -> list\n\n"
-     "Return the objects on the frame's evaluation (value) stack, bottom\n"
-     "first. Each object is returned with a new reference; NULL slots become\n"
-     "None.\n\n"
-     "If depth is given it must be an int, and is used as the stack depth\n"
-     "instead of deriving it from the frame's stacktop (which is unavailable\n"
-     "while the eval loop owns the stack pointer). It must be no greater than\n"
-     "the code object's co_stacksize. A negative depth means the same as\n"
-     "omitting it: derive the depth from stacktop."},
+     "Return the frame's value stack, top last.\n"
+     "If depth is given it is used as stack depth, otherwise it is obtained from the frame.\n"},
     {NULL, NULL, 0, NULL}
 };
 
 static struct PyModuleDef frameinspect_module = {
     PyModuleDef_HEAD_INIT,
     "teel.frameinspect",
-    "Inspect the CPython value stack of frame objects (3.12.13 only).",
+    "Inspect the CPython value stack of frame objects.",
     -1,
     frameinspect_methods,
     NULL, NULL, NULL, NULL
