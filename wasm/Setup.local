@@ -1,0 +1,5 @@
+# Links the teel C modules into python.wasm (WASI cannot load extensions).
+# build.sh copies teel/*.c into Modules/ as _teel_*.c of the CPython source tree.
+*static*
+_teel_frameinspect _teel_frameinspect.c -DTEEL_BUILTIN
+_teel_host _teel_host.c

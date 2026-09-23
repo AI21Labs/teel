@@ -1,5 +1,7 @@
 #define PY_SSIZE_T_CLEAN
+#ifndef Py_BUILD_CORE
 #define Py_BUILD_CORE 1
+#endif
 
 #include <Python.h>
 #include <frameobject.h>
@@ -129,9 +131,19 @@ static PyMethodDef frameinspect_methods[] = {
     {NULL, NULL, 0, NULL}
 };
 
+/* Linked into the interpreter (e.g. the WASI build), a builtin module cannot
+ * live inside the teel package, so it gets a flat name instead. */
+#ifdef TEEL_BUILTIN
+#define MODULE_NAME "_teel_frameinspect"
+#define MODULE_INIT PyInit__teel_frameinspect
+#else
+#define MODULE_NAME "teel.frameinspect"
+#define MODULE_INIT PyInit_frameinspect
+#endif
+
 static struct PyModuleDef frameinspect_module = {
     PyModuleDef_HEAD_INIT,
-    "teel.frameinspect",
+    MODULE_NAME,
     "Inspect the CPython value stack of frame objects.",
     -1,
     frameinspect_methods,
@@ -139,7 +151,7 @@ static struct PyModuleDef frameinspect_module = {
 };
 
 PyMODINIT_FUNC
-PyInit_frameinspect(void)
+MODULE_INIT(void)
 {
     return PyModule_Create(&frameinspect_module);
 }

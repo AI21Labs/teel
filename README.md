@@ -175,6 +175,33 @@ Running 10 prompts as described, on average Teel takes 58s, original async JS ta
 
 This is 61% faster than plain synchronous Python and 19% faster than the JS baseline.
 
+## WebAssembly (WASI)
+
+Teel can run inside a sandboxed CPython 3.12.13 compiled to `wasm32-wasi`. The guest has no threads, so the host does the work and the guest runs the lookahead.
+
+- Declare host-implemented functions with `teel.guest.host_function` (instead of `@cacheable`) and wrap the run in `teel.guest.Session()` (instead of `Teel()`). `@jit` and `@inline` work as usual.
+- When the guest blocks on a host function, it first submits the calls the lookahead predicts. While it waits, each prefetched result resumes the lookahead, which submits further predictions.
+- Arguments and results cross the boundary as JSON (`teel/wire.py`).
+
+WASI cannot load extension modules, so `wasm/build.sh` links `teel/frameinspect.c` and the host-call module `teel/_host.c` into `python.wasm`:
+
+```bash
+WASI_SDK_PATH=/path/to/wasi-sdk-21 WASI_VFS_PATH=/path/to/wasi-vfs ./wasm/build.sh      # -> build/wasi/python.wasm
+uv run --with wasmtime python examples/wasm/host.py
+```
+
+`WASI_VFS_PATH` is a directory holding [wasi-vfs](https://github.com/kateinoigakukun/wasi-vfs)'s `libwasi_vfs.a` and CLI. The build compiles the stdlib and teel into a zip and embeds it in `python.wasm` at `/usr/local/lib/python312.zip`, so `python.wasm` is the only output.
+
+The guest imports three functions from the `teel` module. The guest owns its memory, so the host only writes into buffers the guest passes in. The guest exports nothing besides `memory`, and the host never calls back into it:
+
+| import | returns |
+|---|---|
+| `submit(req_ptr, req_len)` | token; the host starts the request in the background |
+| `next(token_out_ptr)` | blocks until any request completes, writes its token (i32 LE), returns the response length |
+| `read(buf_ptr, buf_len)` | copies that response into the guest buffer |
+
+`teel/wasmtime_host.py` implements these on wasmtime-py. `teel.host.Dispatcher` runs the calls on threads.
+
 ## GIL peskiness
 
 In the current implementation we ship background calls to a `ThreadPoolExecutor`.

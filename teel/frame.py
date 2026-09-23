@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 
-from teel.frameinspect import getvaluestack
+try:
+    from teel.frameinspect import getvaluestack
+except ImportError:  # linked into the interpreter, e.g. the WASI build
+    from _teel_frameinspect import getvaluestack  # type: ignore[no-redef]
 
 import dis
 import operator
