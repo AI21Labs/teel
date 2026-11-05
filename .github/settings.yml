@@ -34,6 +34,9 @@ labels:
     description: Work in progress
   - name: draft
     color: '#c800c8'
+  - name: good first issue
+    color: '#7057ff'
+    description: Good for newcomers
 
 branches:
   - name: main
